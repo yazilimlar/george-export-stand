@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPC Cost & Commitment Breakdown — Working Single-File Dashboard</title>
+  <style>
+    :root{
+      --bg:#f8fafc; --card:#ffffff; --line:#e2e8f0; --text:#0f172a; --muted:#64748b;
+      --blue:#2563eb; --blue2:#dbeafe; --green:#166534; --red:#991b1b; --shadow:0 8px 24px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1600px;margin:0 auto;padding:20px}
+    .header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+    .header .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:14px;padding-bottom:14px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand-icon{width:42px;height:42px;border-radius:12px;background:var(--blue);display:grid;place-items:center;color:#fff;font-size:22px;font-weight:700}
+    h1,h2,h3,p{margin:0}
+    .sub{font-size:12px;color:var(--muted);margin-top:4px}
+    .btn, .file-label{border:1px solid var(--line);background:#fff;color:var(--text);padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .file-input{display:none}
+    .hero{padding-top:28px}
+    .empty{max-width:680px;margin:40px auto;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:36px;text-align:center}
+    .empty .icon{width:84px;height:84px;border-radius:999px;margin:0 auto 18px;background:#eff6ff;display:grid;place-items:center;font-size:34px;color:var(--blue)}
+    .status{margin-top:16px;font-size:14px}
+    .error{margin-top:16px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:12px 14px;border-radius:12px;text-align:left}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+    .stat{padding:20px;min-height:132px;display:flex;flex-direction:column;justify-content:space-between}
+    .stat .top{display:flex;justify-content:space-between;align-items:flex-start}
+    .stat .mini{width:38px;height:38px;border-radius:10px;background:#eff6ff;color:var(--blue);display:grid;place-items:center;font-size:18px}
+    .stat .title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+    .stat .value{font-size:30px;font-weight:800;margin-top:8px}
+    .stat .sub{font-size:12px}
+    .layout{display:grid;grid-template-columns:320px 1fr;gap:16px;margin-top:16px}
+    .sidebar{position:sticky;top:84px;max-height:calc(100vh - 100px);overflow:auto;padding:18px}
+    .section-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px}
+    .search{position:relative}.search input{width:100%;padding:11px 12px 11px 38px;border:1px solid var(--line);border-radius:12px;background:#f8fafc}
+    .search .mag{position:absolute;left:12px;top:10px;color:#94a3b8}
+    .pill-wrap,.period-wrap{display:flex;flex-wrap:wrap;gap:8px}
+    .pill{padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:#334155}
+    .pill.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .period{padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:#334155}
+    .period.active{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+    .controls-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .linkish{background:none;border:none;padding:0;color:var(--blue);font-weight:700;cursor:pointer;font-size:11px}
+    .maincol{display:grid;gap:16px}
+    .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card-head{padding:18px 18px 0 18px}
+    .card-body{padding:18px}
+    .chart-box{height:300px}
+    svg{display:block;width:100%;height:100%}
+    .matrix-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);background:#f8fafc}
+    .table-wrap{overflow:auto;max-height:640px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{padding:12px 10px;border-bottom:1px solid #eef2f7;white-space:nowrap}
+    thead th{position:sticky;top:0;background:#f8fafc;z-index:2;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);cursor:pointer}
+    th.sticky-left, td.sticky-left{position:sticky;left:0;background:inherit;z-index:3}
+    th.sticky-right, td.sticky-right{position:sticky;right:0;background:inherit;z-index:3;text-align:right}
+    tbody tr:hover{background:#f8fafc}
+    tbody td.sticky-left, tbody td.sticky-right{background:#fff}
+    tbody tr:hover td.sticky-left, tbody tr:hover td.sticky-right{background:#f8fafc}
+    tfoot td{position:sticky;bottom:0;background:#e2e8f0;font-weight:800;z-index:2}
+    .sort{font-size:10px;margin-left:5px;color:#94a3b8}
+    .heat-neg{background:#fef2f2;color:#991b1b}
+    .footer{padding:28px 0 16px;color:#94a3b8;text-align:center;font-size:11px;letter-spacing:.15em;text-transform:uppercase}
+    .meta{font-size:12px;color:var(--muted)}
+    .hidden{display:none !important}
+    @media (max-width: 1100px){.layout{grid-template-columns:1fr}.sidebar{position:relative;top:auto;max-height:none}.charts,.grid4{grid-template-columns:1fr 1fr}}
+    @media (max-width: 760px){.charts,.grid4{grid-template-columns:1fr}.header .wrap{flex-direction:column;align-items:stretch}.header-actions{display:flex;gap:10px;flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="wrap">
+      <div class="brand">
+        <div class="brand-icon">↗</div>
+        <div>
+          <h1>IPC Cost & Commitment Breakdown</h1>
+          <div class="sub" id="periodSummary">Upload a CSV or Excel file to begin.</div>
+        </div>
+      </div>
+      <div class="header-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <label class="file-label" for="fileInput">Upload CSV / Excel</label>
+        <input id="fileInput" class="file-input" type="file" accept=".csv,.xlsx,.xls" />
+        <button class="btn" id="resetBtn">Reset Data</button>
+        <button class="btn primary" id="downloadBtn">Download Matrix CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap hero" id="emptyState">
+    <div class="empty">
+      <div class="icon">⇪</div>
+      <h2 style="font-size:28px;font-weight:800">Working single-file dashboard</h2>
+      <p class="sub" style="font-size:15px;line-height:1.5;margin-top:8px">
+        This version is plain HTML/CSS/JavaScript, so it runs directly in the browser without React, JSX, Recharts, or lucide-react.
+      </p>
+      <div class="status" id="engineStatus">Excel parser is loading… CSV works regardless.</div>
+      <div class="meta" style="margin-top:14px;line-height:1.6">
+        Improvements included here: automatic header-row detection, standalone rendering, sortable matrix, searchable filters, trend chart, top sources chart, and CSV export.
+      </div>
+      <div id="errorBox" class="error hidden"></div>
+    </div>
+  </div>
+
+  <div class="wrap hidden" id="dashboard">
+    <section class="grid4">
+      <div class="card stat"><div class="top"><div class="mini">$</div></div><div><div class="title">Selected Expenditure</div><div class="value" id="statTotal">$0</div><div class="sub">Filtered total</div></div></div>
+      <div class="card stat"><div class="top"><div class="mini">◷</div></div><div><div class="title">Monthly Run Rate</div><div class="value" id="statRunRate">$0</div><div class="sub">Average per selected month</div></div></div>
+      <div class="card stat"><div class="top"><div class="mini">👥</div></div><div><div class="title">Active Vendors</div><div class="value" id="statVendors">0</div><div class="sub">Unique source descriptions</div></div></div>
+      <div class="card stat"><div class="top"><div class="mini">▤</div></div><div><div class="title">Entries Analyzed</div><div class="value" id="statEntries">0</div><div class="sub">Processed transaction rows</div></div></div>
+    </section>
+
+    <div class="layout">
+      <aside class="card sidebar">
+        <div class="section-title">Advanced Slicers</div>
+
+        <div style="margin-bottom:24px">
+          <div class="section-title">Search Source</div>
+          <div class="search">
+            <span class="mag">⌕</span>
+            <input id="searchInput" type="text" placeholder="Filter by vendor..." />
+          </div>
+        </div>
+
+        <div style="margin-bottom:24px">
+          <div class="controls-row">
+            <div class="section-title" style="margin:0">Reporting Periods</div>
+            <div style="display:flex;gap:12px"><button class="linkish" id="monthsAllBtn">All</button><button class="linkish" id="monthsNoneBtn">None</button></div>
+          </div>
+          <div class="period-wrap" id="monthsWrap"></div>
+        </div>
+
+        <div style="margin-bottom:24px">
+          <div class="controls-row"><div class="section-title" style="margin:0">Cost Type</div><button class="linkish" id="typesClearBtn">Clear</button></div>
+          <div class="pill-wrap" id="typesWrap"></div>
+        </div>
+
+        <div>
+          <div class="controls-row"><div class="section-title" style="margin:0">Category</div><button class="linkish" id="catsClearBtn">Clear</button></div>
+          <div class="pill-wrap" id="catsWrap"></div>
+        </div>
+      </aside>
+
+      <div class="maincol">
+        <div class="charts">
+          <div class="card">
+            <div class="card-head"><div class="section-title">Expenditure Trend</div></div>
+            <div class="card-body"><div class="chart-box" id="trendChart"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="section-title">Top 10 Sources (Current Period)</div></div>
+            <div class="card-body"><div class="chart-box" id="topChart"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="matrix-head">
+            <div class="section-title" style="margin:0">Monthly Intelligence Matrix</div>
+            <div class="meta">Click headers to sort</div>
+          </div>
+          <div class="table-wrap">
+            <table id="matrixTable"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">George Oktem • Manhattan, NY • 2026</div>
+  </div>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script>
+    const state = {
+      raw: [],
+      searchTerm: '',
+      selectedTypes: [],
+      selectedCats: [],
+      selectedMonths: [],
+      sortConfig: { key: 'total', direction: 'desc' },
+      xlsxReady: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const fmtMoney = (n) => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', minimumFractionDigits:0, maximumFractionDigits:0}).format(Number(n || 0));
+    const uniq = (arr) => [...new Set(arr)];
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function setError(msg){
+      const box = $('errorBox');
+      if (!msg) { box.classList.add('hidden'); box.textContent=''; return; }
+      box.classList.remove('hidden');
+      box.textContent = msg;
+    }
+
+    function normalizeKey(s){
+      return String(s ?? '').replace(/\s+/g,' ').trim().toLowerCase();
+    }
+
+    function parseCurrency(val){
+      if (val === undefined || val === null || val === '') return 0;
+      if (typeof val === 'number') return isFinite(val) ? val : 0;
+      let s = String(val).trim();
+      if (!s) return 0;
+      s = s.replace(/[$,]/g, '');
+      if (/^\(.*\)$/.test(s)) s = '-' + s.slice(1, -1);
+      const n = parseFloat(s);
+      return isFinite(n) ? n : 0;
+    }
+
+    function excelSerialToDate(serial){
+      if (typeof serial !== 'number' || !isFinite(serial)) return null;
+      const utcDays = Math.floor(serial - 25569);
+      const utcValue = utcDays * 86400;
+      const dateInfo = new Date(utcValue * 1000);
+      return isNaN(dateInfo.getTime()) ? null : dateInfo;
+    }
+
+    function parseDateAny(v){
+      if (v instanceof Date && !isNaN(v.getTime())) return v;
+      if (typeof v === 'number') return excelSerialToDate(v);
+      if (v === undefined || v === null || String(v).trim()==='') return null;
+      const s = String(v).trim();
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+      const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (m) {
+        let mm = Number(m[1]), dd = Number(m[2]), yy = Number(m[3]);
+        if (yy < 100) yy += 2000;
+        const d2 = new Date(yy, mm - 1, dd);
+        return isNaN(d2.getTime()) ? null : d2;
+      }
+      return null;
+    }
+
+    function monthKey(d){
+      if (!d) return 'Unknown';
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    function isUsefulHeaderRow(row){
+      const keys = row.map(normalizeKey);
+      const wanted = ['amount','source description','post date','ref. date','type','cat'];
+      const hits = wanted.filter(w => keys.includes(w)).length;
+      return hits >= 2 && keys.length >= 3;
+    }
+
+    function rowsFromAOA(aoa){
+      const cleaned = aoa.map(r => (r || []).map(v => typeof v === 'string' ? v.trim() : v));
+      let headerIdx = cleaned.findIndex(isUsefulHeaderRow);
+      if (headerIdx === -1) headerIdx = 0;
+      const headers = cleaned[headerIdx].map(v => String(v ?? '').trim());
+      const out = [];
+      for (let i = headerIdx + 1; i < cleaned.length; i++) {
+        const row = cleaned[i];
+        if (!row || row.every(v => String(v ?? '').trim() === '')) continue;
+        const obj = {};
+        headers.forEach((h, idx) => obj[h] = row[idx]);
+        out.push(obj);
+      }
+      return out;
+    }
+
+    function csvToAOA(text){
+      const rows = [];
+      let row = [], cur = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i+1];
+        if (ch === '"') {
+          if (inQuotes && next === '"') { cur += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          row.push(cur); cur = '';
+        } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+          if (ch === '\r' && next === '\n') i++;
+          row.push(cur); rows.push(row); row = []; cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      row.push(cur); rows.push(row);
+      return rows;
+    }
+
+    function mapRow(row, idx){
+      const map = {};
+      Object.keys(row).forEach(k => map[normalizeKey(k)] = row[k]);
+      const source = map['source description'] ?? map['source'] ?? map['vendor'] ?? 'Unknown Source';
+      const amount = parseCurrency(map['amount'] ?? map['total'] ?? map['value']);
+      const postDate = parseDateAny(map['post date']);
+      const refDate = parseDateAny(map['ref. date'] ?? map['ref date'] ?? map['reference date']);
+      const effectiveDate = postDate || refDate;
+      const out = {
+        ...row,
+        id: idx,
+        source: String(source || 'Unknown Source').trim() || 'Unknown Source',
+        amount,
+        type: String(map['type'] ?? 'N/A').trim() || 'N/A',
+        cat: String(map['cat'] ?? map['category'] ?? 'N/A').trim() || 'N/A',
+        effectiveDate,
+        monthKey: monthKey(effectiveDate)
+      };
+      return out;
+    }
+
+    function loadRows(rows){
+      const processed = rows.map(mapRow).filter(r => !(r.source === 'Unknown Source' && r.amount === 0));
+      if (!processed.length) throw new Error('No usable data rows were found. Check that the file contains columns such as Amount, Source Description, Post Date / Ref. Date, Type, or Cat.');
+      state.raw = processed;
+      state.selectedMonths = uniq(processed.map(r => r.monthKey).filter(m => m !== 'Unknown')).sort();
+      state.selectedTypes = [];
+      state.selectedCats = [];
+      state.searchTerm = '';
+      state.sortConfig = { key: 'total', direction: 'desc' };
+      $('searchInput').value = '';
+      $('emptyState').classList.add('hidden');
+      $('dashboard').classList.remove('hidden');
+      setError('');
+      renderAll();
+    }
+
+    function getFilterOptions(){
+      return {
+        months: uniq(state.raw.map(r => r.monthKey)).filter(m => m !== 'Unknown').sort(),
+        types: uniq(state.raw.map(r => r.type)).sort(),
+        cats: uniq(state.raw.map(r => r.cat)).sort()
+      };
+    }
+
+    function getFiltered(){
+      return state.raw.filter(r => {
+        const typeMatch = state.selectedTypes.length === 0 || state.selectedTypes.includes(r.type);
+        const catMatch = state.selectedCats.length === 0 || state.selectedCats.includes(r.cat);
+        const monthMatch = state.selectedMonths.length === 0 || state.selectedMonths.includes(r.monthKey);
+        const searchMatch = r.source.toLowerCase().includes(state.searchTerm.toLowerCase());
+        return typeMatch && catMatch && monthMatch && searchMatch;
+      });
+    }
+
+    function buildMatrix(filtered){
+      const activeMonths = uniq(filtered.map(r => r.monthKey)).filter(m => m !== 'Unknown').sort();
+      const sourceMap = {};
+      let grandTotal = 0, maxMonthlySpend = 0;
+      filtered.forEach(r => {
+        if (!sourceMap[r.source]) sourceMap[r.source] = { total:0, monthly:{} };
+        sourceMap[r.source].monthly[r.monthKey] = (sourceMap[r.source].monthly[r.monthKey] || 0) + r.amount;
+        sourceMap[r.source].total += r.amount;
+        grandTotal += r.amount;
+        maxMonthlySpend = Math.max(maxMonthlySpend, Math.abs(sourceMap[r.source].monthly[r.monthKey] || 0));
+      });
+      const totalsBySource = Object.keys(sourceMap).sort((a,b) => {
+        const key = state.sortConfig.key;
+        const dir = state.sortConfig.direction === 'asc' ? 1 : -1;
+        let va, vb;
+        if (key === 'source') { va = a.toLowerCase(); vb = b.toLowerCase(); }
+        else if (key === 'total') { va = sourceMap[a].total; vb = sourceMap[b].total; }
+        else { va = sourceMap[a].monthly[key] || 0; vb = sourceMap[b].monthly[key] || 0; }
+        if (va < vb) return -1 * dir;
+        if (va > vb) return 1 * dir;
+        return a.localeCompare(b);
+      });
+      return { activeMonths, sourceMap, grandTotal, maxMonthlySpend, totalsBySource };
+    }
+
+    function heatStyle(val, max){
+      if (!val) return '';
+      if (val < 0) return ' class="heat-neg"';
+      const ratio = clamp(Math.abs(val) / (max || 1), 0, 1);
+      const alpha = 0.08 + ratio * 0.52;
+      return ` style="background:rgba(37,99,235,${alpha.toFixed(3)});color:${ratio>.5?'#fff':'#0f172a'};font-weight:700"`;
+    }
+
+    function renderStats(filtered, matrix){
+      $('statTotal').textContent = fmtMoney(matrix.grandTotal);
+      $('statRunRate').textContent = fmtMoney(matrix.grandTotal / (state.selectedMonths.length || 1));
+      $('statVendors').textContent = matrix.totalsBySource.length.toLocaleString();
+      $('statEntries').textContent = filtered.length.toLocaleString();
+      $('periodSummary').textContent = state.selectedMonths.length ? `Filtered Period: ${state.selectedMonths.length} month(s) selected.` : 'Filtered Period: no specific month filter selected.';
+    }
+
+    function renderFilters(){
+      const opts = getFilterOptions();
+      $('monthsWrap').innerHTML = opts.months.map(m => `<button class="period ${state.selectedMonths.includes(m)?'active':''}" data-month="${esc(m)}">${esc(m)}</button>`).join('');
+      $('typesWrap').innerHTML = opts.types.map(t => `<button class="pill ${state.selectedTypes.includes(t)?'active':''}" data-type="${esc(t)}">${esc(t)}</button>`).join('');
+      $('catsWrap').innerHTML = opts.cats.map(c => `<button class="pill ${state.selectedCats.includes(c)?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+    }
+
+    function renderTrend(filtered){
+      const box = $('trendChart');
+      const monthMap = {};
+      filtered.forEach(r => { if (r.monthKey !== 'Unknown') monthMap[r.monthKey] = (monthMap[r.monthKey] || 0) + r.amount; });
+      const pts = Object.entries(monthMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([month, amount]) => ({month, amount}));
+      if (!pts.length) { box.innerHTML = '<div class="meta">No chart data for current filters.</div>'; return; }
+      const w = 900, h = 280, padL = 60, padR = 20, padT = 20, padB = 42;
+      const vals = pts.map(p => p.amount);
+      const min = Math.min(0, ...vals), max = Math.max(...vals, 0);
+      const range = (max - min) || 1;
+      const x = i => padL + (i * (w - padL - padR) / Math.max(pts.length - 1, 1));
+      const y = v => padT + (max - v) * (h - padT - padB) / range;
+      const path = pts.map((p,i) => `${i===0?'M':'L'} ${x(i)} ${y(p.amount)}`).join(' ');
+      const zeroY = y(0);
+      const gridVals = Array.from({length:5}, (_,i)=> min + (range * i / 4));
+      box.innerHTML = `
+        <svg viewBox="0 0 ${w} ${h}" aria-label="Expenditure trend chart">
+          ${gridVals.map(v => `<g><line x1="${padL}" x2="${w-padR}" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8f0"/><text x="${padL-8}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="#64748b">${esc(fmtMoney(v).replace('.00',''))}</text></g>`).join('')}
+          <line x1="${padL}" x2="${w-padR}" y1="${zeroY}" y2="${zeroY}" stroke="#94a3b8" stroke-dasharray="4 4"/>
+          <path d="${path}" fill="none" stroke="#2563eb" stroke-width="3"/>
+          ${pts.map((p,i)=>`<g><circle cx="${x(i)}" cy="${y(p.amount)}" r="4" fill="#2563eb"><title>${esc(p.month)}: ${esc(fmtMoney(p.amount))}</title></circle><text x="${x(i)}" y="${h-16}" text-anchor="middle" font-size="10" fill="#64748b">${esc(p.month)}</text></g>`).join('')}
+        </svg>`;
+    }
+
+    function renderTop(matrix){
+      const box = $('topChart');
+      const top = matrix.totalsBySource.slice(0,10).map(s => ({source:s, amount:matrix.sourceMap[s].total}));
+      if (!top.length) { box.innerHTML = '<div class="meta">No source totals for current filters.</div>'; return; }
+      const w = 900, h = 280, padL = 170, padR = 30, padT = 20, padB = 20;
+      const max = Math.max(...top.map(t => Math.abs(t.amount)), 1);
+      const rowH = (h - padT - padB) / top.length;
+      const x = v => padL + (Math.abs(v) / max) * (w - padL - padR);
+      box.innerHTML = `
+        <svg viewBox="0 0 ${w} ${h}" aria-label="Top sources chart">
+          ${top.map((d,i)=>{
+            const y = padT + i * rowH + rowH * 0.15;
+            const barH = rowH * 0.7;
+            const label = d.source.length > 28 ? d.source.slice(0,28) + '…' : d.source;
+            return `<g>
+              <text x="${padL-10}" y="${y+barH/2+4}" text-anchor="end" font-size="11" fill="#334155">${esc(label)}</text>
+              <rect x="${padL}" y="${y}" width="${x(d.amount)-padL}" height="${barH}" rx="5" fill="#3b82f6"><title>${esc(d.source)}: ${esc(fmtMoney(d.amount))}</title></rect>
+              <text x="${x(d.amount)+8}" y="${y+barH/2+4}" font-size="10" fill="#334155">${esc(fmtMoney(d.amount))}</text>
+            </g>`;
+          }).join('')}
+        </svg>`;
+    }
+
+    function renderMatrix(matrix){
+      const table = $('matrixTable');
+      const arrow = (key) => state.sortConfig.key === key ? (state.sortConfig.direction === 'desc' ? '▼' : '▲') : '▾';
+      const monthTotals = {};
+      matrix.activeMonths.forEach(m => monthTotals[m] = matrix.totalsBySource.reduce((a,s)=>a+(matrix.sourceMap[s].monthly[m]||0),0));
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th class="sticky-left" data-sort="source">Source Description <span class="sort">${arrow('source')}</span></th>
+            ${matrix.activeMonths.map(m => `<th data-sort="${esc(m)}">${esc(m)} <span class="sort">${arrow(m)}</span></th>`).join('')}
+            <th class="sticky-right" data-sort="total">Total <span class="sort">${arrow('total')}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matrix.totalsBySource.map(source => `
+            <tr>
+              <td class="sticky-left" title="${esc(source)}" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;font-weight:700">${esc(source)}</td>
+              ${matrix.activeMonths.map(m => {
+                const val = matrix.sourceMap[source].monthly[m] || 0;
+                return `<td${heatStyle(val, matrix.maxMonthlySpend)}>${val ? esc(fmtMoney(val)) : '-'}</td>`;
+              }).join('')}
+              <td class="sticky-right" style="font-weight:800">${esc(fmtMoney(matrix.sourceMap[source].total))}</td>
+            </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="sticky-left">Aggregated Monthly Totals</td>
+            ${matrix.activeMonths.map(m => `<td>${esc(fmtMoney(monthTotals[m]))}</td>`).join('')}
+            <td class="sticky-right">${esc(fmtMoney(matrix.grandTotal))}</td>
+          </tr>
+        </tfoot>`;
+    }
+
+    function renderAll(){
+      renderFilters();
+      const filtered = getFiltered();
+      const matrix = buildMatrix(filtered);
+      renderStats(filtered, matrix);
+      renderTrend(filtered);
+      renderTop(matrix);
+      renderMatrix(matrix);
+    }
+
+    async function handleUpload(file){
+      try {
+        setError('');
+        if (!file) return;
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        let rows;
+        if (isExcel) {
+          if (!window.XLSX) throw new Error('Excel parser is unavailable. CSV upload will still work.');
+          const ab = await file.arrayBuffer();
+          const wb = window.XLSX.read(ab, {type:'array', cellDates:true});
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const aoa = window.XLSX.utils.sheet_to_json(sheet, {header:1, raw:true, defval:''});
+          rows = rowsFromAOA(aoa);
+        } else {
+          const text = await file.text();
+          rows = rowsFromAOA(csvToAOA(text));
+        }
+        loadRows(rows);
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Failed to parse file.');
+      }
+    }
+
+    $('fileInput').addEventListener('change', e => handleUpload(e.target.files[0]));
+    $('resetBtn').addEventListener('click', () => {
+      state.raw = []; state.searchTerm=''; state.selectedTypes=[]; state.selectedCats=[]; state.selectedMonths=[];
+      $('dashboard').classList.add('hidden'); $('emptyState').classList.remove('hidden'); $('fileInput').value = '';
+      $('engineStatus').textContent = state.xlsxReady ? 'Excel parser is ready. CSV works too.' : 'Excel parser is loading… CSV works regardless.';
+      setError('');
+    });
+    $('downloadBtn').addEventListener('click', () => {
+      if (!state.raw.length) return;
+      const filtered = getFiltered();
+      const matrix = buildMatrix(filtered);
+      let csv = ['Source Description', ...matrix.activeMonths, 'Total'].join(',') + '\n';
+      matrix.totalsBySource.forEach(source => {
+        const row = [`"${String(source).replace(/"/g,'""')}"`, ...matrix.activeMonths.map(m => matrix.sourceMap[source].monthly[m] || 0), matrix.sourceMap[source].total];
+        csv += row.join(',') + '\n';
+      });
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'ipc_cost_commitment_matrix.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+    $('searchInput').addEventListener('input', e => { state.searchTerm = e.target.value || ''; renderAll(); });
+    $('monthsAllBtn').addEventListener('click', ()=>{ state.selectedMonths = getFilterOptions().months.slice(); renderAll(); });
+    $('monthsNoneBtn').addEventListener('click', ()=>{ state.selectedMonths = []; renderAll(); });
+    $('typesClearBtn').addEventListener('click', ()=>{ state.selectedTypes = []; renderAll(); });
+    $('catsClearBtn').addEventListener('click', ()=>{ state.selectedCats = []; renderAll(); });
+    $('monthsWrap').addEventListener('click', e => {
+      const btn = e.target.closest('[data-month]'); if (!btn) return;
+      const m = btn.dataset.month;
+      state.selectedMonths = state.selectedMonths.includes(m) ? state.selectedMonths.filter(x => x !== m) : [...state.selectedMonths, m];
+      renderAll();
+    });
+    $('typesWrap').addEventListener('click', e => {
+      const btn = e.target.closest('[data-type]'); if (!btn) return;
+      const t = btn.dataset.type;
+      state.selectedTypes = state.selectedTypes.includes(t) ? state.selectedTypes.filter(x => x !== t) : [...state.selectedTypes, t];
+      renderAll();
+    });
+    $('catsWrap').addEventListener('click', e => {
+      const btn = e.target.closest('[data-cat]'); if (!btn) return;
+      const c = btn.dataset.cat;
+      state.selectedCats = state.selectedCats.includes(c) ? state.selectedCats.filter(x => x !== c) : [...state.selectedCats, c];
+      renderAll();
+    });
+    $('matrixTable').addEventListener('click', e => {
+      const th = e.target.closest('th[data-sort]'); if (!th) return;
+      const key = th.dataset.sort;
+      state.sortConfig = { key, direction: state.sortConfig.key === key && state.sortConfig.direction === 'desc' ? 'asc' : 'desc' };
+      renderAll();
+    });
+
+    window.addEventListener('load', () => {
+      state.xlsxReady = !!window.XLSX;
+      $('engineStatus').textContent = state.xlsxReady ? 'Excel parser is ready. CSV works too.' : 'Excel parser could not be loaded. CSV still works.';
+    });
+  </script>
+</body>
+</html>
