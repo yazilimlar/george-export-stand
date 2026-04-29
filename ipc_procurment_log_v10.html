@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPC Procurment Log — Executive Procurement, Estimate & T&M Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #2563eb;
+      --good: #059669;
+      --warn: #d97706;
+      --bad: #dc2626;
+    }
+    html, body { height: 100%; }
+    body { background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 1rem; box-shadow: 0 8px 24px rgba(15,23,42,.05); }
+    .tab-btn.active { background: #0f172a; color: white; }
+    .metric-card { min-height: 112px; }
+    .rainbow-mode {
+      background: linear-gradient(90deg, #ff3d77, #ff8a00, #ffd400, #32c96b, #29a3ff, #7b5cff, #ff3d77) !important;
+      background-size: 280% 280%;
+      animation: rainbowShift 6s linear infinite, bannerWave 4.2s ease-in-out infinite, bannerGlow 2.8s ease-in-out infinite;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,.18), 0 0 18px rgba(255,61,119,.28), 0 0 30px rgba(41,163,255,.18);
+    }
+    .rainbow-mode::after {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,0) 42%),
+        radial-gradient(circle at 15% 50%, rgba(255,255,255,.18), transparent 20%),
+        radial-gradient(circle at 85% 30%, rgba(255,255,255,.22), transparent 22%),
+        radial-gradient(circle at 50% 100%, rgba(255,255,255,.12), transparent 28%);
+      animation: shimmerDrift 5s linear infinite;
+    }
+    @keyframes rainbowShift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+    @keyframes bannerWave {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    @keyframes bannerGlow {
+      0%, 100% { filter: saturate(1) brightness(1); }
+      50% { filter: saturate(1.14) brightness(1.06); }
+    }
+    @keyframes shimmerDrift {
+      0% { transform: translateX(-2%) scale(1); opacity: .95; }
+      50% { transform: translateX(2%) scale(1.02); opacity: 1; }
+      100% { transform: translateX(-2%) scale(1); opacity: .95; }
+    }
+    .sticky-thead thead th { position: sticky; top: 0; background: #f8fafc; z-index: 2; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: #0f172a; }
+    .chip { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .55rem; border-radius:999px; font-size:.72rem; font-weight:700; }
+    .drawer-open { transform: translateX(0); }
+    .drawer-closed { transform: translateX(100%); }
+    .mono { font-variant-numeric: tabular-nums; }
+    ::-webkit-scrollbar { width: 14px; height: 14px; }
+    ::-webkit-scrollbar-track { background: linear-gradient(180deg, #e2e8f0, #cbd5e1); border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(148,163,184,.35); }
+    ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2563eb 0%, #7c3aed 35%, #ec4899 68%, #10b981 100%); border-radius: 999px; border: 2px solid #e2e8f0; box-shadow: 0 0 12px rgba(37,99,235,.35); }
+    ::-webkit-scrollbar-thumb:hover { filter: brightness(1.08); box-shadow: 0 0 16px rgba(236,72,153,.45); }
+    ::-webkit-scrollbar-corner { background: #e2e8f0; }
+    .matrix-table td[data-clickable="1"], .matrix-table th[data-clickable="1"] { cursor: pointer; }
+    .matrix-table td:hover[data-clickable="1"] { background: #eff6ff; }
+    .header-shell { background: linear-gradient(90deg, #2563eb 0%, #7c3aed 35%, #ec4899 68%, #10b981 100%); background-size: 180% 180%; box-shadow: inset 0 -1px 0 rgba(255,255,255,.12); }
+    .header-shell::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,0) 42%), radial-gradient(circle at top right, rgba(255,255,255,.18), transparent 26%), radial-gradient(circle at left center, rgba(255,255,255,.10), transparent 24%); }
+    .header-content { position: relative; z-index: 1; }
+    .btn-primary { background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.06); }
+    .btn-dark { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.14); }
+    .btn-dark:hover { background: rgba(255,255,255,.14); }
+    .btn-success { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+    .btn-success:hover { filter: brightness(1.06); }
+    .logo-panel { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 24px rgba(0,0,0,.22); backdrop-filter: blur(8px); }
+    .metric-card { position: relative; overflow: hidden; }
+    .metric-card::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background: linear-gradient(180deg, #2563eb, #10b981); opacity:.9; }
+    .section-title { letter-spacing: .02em; }
+    tbody tr:nth-child(odd) { background: linear-gradient(180deg, rgba(248,250,252,.92), rgba(248,250,252,.92)); }
+    tbody tr:nth-child(even) { background: linear-gradient(180deg, rgba(239,246,255,.88), rgba(248,250,252,.96)); }
+    tbody tr:hover { background: linear-gradient(180deg, rgba(219,234,254,.95), rgba(224,242,254,.95)) !important; }
+    .signature-fixed { position: fixed; right: 16px; bottom: 12px; z-index: 40; background: rgba(15,23,42,.92); color: #e2e8f0; border: 1px solid rgba(255,255,255,.10); box-shadow: 0 12px 30px rgba(15,23,42,.25); backdrop-filter: blur(8px); }
+    .floating-slicer { position: sticky; top: 10px; z-index: 35; box-shadow: 0 18px 36px rgba(15,23,42,.10); }
+    .drag-handle { cursor: move; user-select: none; background: linear-gradient(90deg, rgba(37,99,235,.08), rgba(124,58,237,.08), rgba(16,185,129,.08)); border-bottom: 1px solid rgba(148,163,184,.22); }
+    .floating-detached { position: fixed !important; left: 24px; top: 122px; width: calc(100% - 48px); max-width: 1480px; z-index: 60; }
+    .summary-mode .detail-heavy { display: none !important; }
+    .summary-mode #slicerPanel { opacity: .94; }
+    .summary-mode main { padding-top: .75rem; }
+    .summary-hero { display:none; }
+    .summary-mode .summary-hero { display:grid; }
+    .summary-pill { display:inline-flex; align-items:center; gap:.4rem; border-radius:999px; padding:.35rem .8rem; font-size:.74rem; font-weight:700; background: linear-gradient(90deg, rgba(37,99,235,.12), rgba(124,58,237,.12), rgba(16,185,129,.12)); color:#0f172a; border:1px solid rgba(148,163,184,.28); }
+    .kpi-pop { animation: kpiPop .6s ease; }
+    @keyframes kpiPop { 0% { transform: translateY(8px); opacity:.25; } 45% { transform: translateY(-2px); opacity:1; } 100% { transform: translateY(0); } }
+    .quick-date-btn { border:1px solid #cbd5e1; background:#fff; border-radius:.8rem; padding:.5rem .8rem; font-size:.75rem; font-weight:700; color:#334155; }
+    .quick-date-btn:hover { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
+    .header-accent-card { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 12px 24px rgba(0,0,0,.12); backdrop-filter: blur(8px); }
+  </style>
+</head>
+<body class="h-full overflow-hidden">
+  <div class="flex h-full">
+    <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <header id="appHeader" class="header-shell text-white px-6 py-5 border-b border-slate-800 transition-all duration-500 relative">
+        <div class="header-content flex flex-wrap items-center justify-between gap-5">
+          <div class="flex items-center gap-4 min-w-[320px]">
+            <div class="logo-panel rounded-2xl px-4 py-3">
+              <img src="data:image/png;base64,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" alt="IPC logo" class="h-14 w-auto object-contain" />
+            </div>
+            <div>
+              <div class="text-[1.9rem] font-bold tracking-tight leading-tight">IPC Procurment Log</div>
+              <div id="subtitle" class="text-slate-300 text-sm">Procurement, cost proposal, estimate, and T&amp;M intelligence</div>
+              <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300/90">
+                <span class="px-2 py-1 rounded-full bg-white/10 border border-white/10">Engineer Ready</span>
+                <span class="px-2 py-1 rounded-full bg-white/10 border border-white/10">Executive Ready</span>
+                <span class="px-2 py-1 rounded-full bg-white/10 border border-white/10">Searchable Matrix</span>
+              </div>
+            </div>
+          </div>
+          <div class="min-w-[320px]">
+            <div class="text-xs uppercase tracking-[0.18em] text-blue-200/90 font-bold">Prepared by</div>
+            <div class="text-sm font-semibold text-slate-100 mt-1">George Oktem · IPC Resiliency Partners · East River Park, New York</div>
+          </div>
+          <div class="text-right min-w-[280px]">
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-300 font-bold">Today</div>
+            <div id="liveDateTime" class="text-sm font-semibold text-slate-100 mt-1"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="summaryModeBtn" class="btn-dark px-3 py-2 rounded-xl text-sm font-semibold shadow-sm">Executive Summary Mode</button>
+            <button id="loadDefaultBtn" class="btn-dark px-3 py-2 rounded-xl text-sm font-semibold shadow-sm">Load Default Data</button>
+            <label class="btn-primary px-3 py-2 rounded-xl text-sm font-semibold cursor-pointer shadow-sm">Upload CSV
+              <input id="fileInput" type="file" accept=".csv" class="hidden">
+            </label>
+            <button id="exportBtn" class="btn-success px-3 py-2 rounded-xl text-sm font-semibold shadow-sm">Export Current View</button>
+          </div>
+        </div>
+      </header>
+
+      <section id="slicerPanel" class="floating-slicer px-6 py-0 border-b border-slate-200 bg-white rounded-b-2xl">
+        <div class="drag-handle -mx-6 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 rounded-t-none">
+          <div class="flex items-center gap-3">
+            <span class="summary-pill">Executive Slicer Panel</span>
+            <span class="text-xs font-semibold text-slate-500">Drag to reposition · Press R to reset</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="collapseSlicerBtn" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">Collapse</button>
+            <button id="detachSlicerBtn" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">Float</button>
+          </div>
+        </div>
+        <div id="slicerBody" class="py-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-9 gap-3">
+          <div class="xl:col-span-2 relative">
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Universal Search</label>
+            <input id="globalSearch" type="text" placeholder="Search vendor, PO, description, item, comment, cost code, category, status..." class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Vendor</label>
+            <select id="vendorFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Category</label>
+            <select id="categoryFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Status</label>
+            <select id="statusFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Date Basis</label>
+            <select id="dateFieldFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
+              <option value="poDateObj">PO Date</option>
+              <option value="receiptDateObj">Receipt Date</option>
+              <option value="invoiceDateObj">Invoice Date</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">From</label>
+            <input id="dateFrom" type="date" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">To</label>
+            <input id="dateTo" type="date" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          </div>
+          <div class="flex items-end gap-2">
+            <button id="resetBtn" class="flex-1 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold hover:bg-slate-50">Reset</button>
+            <button id="toggleTipsBtn" class="rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold hover:bg-slate-50">Tips</button>
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2 detail-heavy">
+          <button class="quick-date-btn" data-quick-range="this-month">This Month</button>
+          <button class="quick-date-btn" data-quick-range="last-month">Last Month</button>
+          <button class="quick-date-btn" data-quick-range="ytd">YTD</button>
+          <button class="quick-date-btn" data-quick-range="last-90">Last 90 Days</button>
+          <button class="quick-date-btn" data-quick-range="clear">Clear Dates</button>
+        </div>
+        <div id="dataNotice" class="hidden mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3"></div>
+        <div id="tipsBox" class="hidden mt-3 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+          <span class="font-semibold">Tips:</span> the universal search looks across all major fields at once. Example searches: <span class="font-semibold">heavy metal</span>, <span class="font-semibold">IPCRP1-0954</span>, <span class="font-semibold">chevrolet</span>, <span class="font-semibold">2000-1240</span>, <span class="font-semibold">accepted</span>. You can also slice by <span class="font-semibold">PO Date</span>, <span class="font-semibold">Receipt Date</span>, or <span class="font-semibold">Invoice Date</span> using the date range controls.
+        </div>
+      </div>
+      </section>
+
+      <main class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <section class="summary-hero grid grid-cols-1 xl:grid-cols-4 gap-4">
+          <div class="panel p-5 xl:col-span-2">
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-500 font-bold">Executive Snapshot</div>
+            <div id="summaryNarrative" class="mt-3 text-sm leading-6 text-slate-700">Awaiting dataset.</div>
+          </div>
+          <div class="panel p-5">
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-500 font-bold">Primary Driver</div>
+            <div id="summaryTopVendor" class="mt-3 text-2xl font-bold text-slate-900">—</div>
+            <div id="summaryTopVendorMeta" class="mt-2 text-xs text-slate-500">No data loaded.</div>
+          </div>
+          <div class="panel p-5">
+            <div class="text-xs uppercase tracking-[0.18em] text-slate-500 font-bold">Leading Category</div>
+            <div id="summaryTopCategory" class="mt-3 text-2xl font-bold text-slate-900">—</div>
+            <div id="summaryTopCategoryMeta" class="mt-2 text-xs text-slate-500">No data loaded.</div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div class="panel metric-card p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Total Ordered Amount</div>
+            <div id="kpiAmount" class="text-3xl font-bold mt-2 mono">$0</div>
+            <div class="text-xs text-slate-500 mt-2">Filtered dataset</div>
+          </div>
+          <div class="panel metric-card p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Unique POs</div>
+            <div id="kpiPOs" class="text-3xl font-bold mt-2 mono">0</div>
+            <div class="text-xs text-slate-500 mt-2">PO-centric lens</div>
+          </div>
+          <div class="panel metric-card p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Active Vendors</div>
+            <div id="kpiVendors" class="text-3xl font-bold mt-2 mono">0</div>
+            <div class="text-xs text-slate-500 mt-2">Vendor-centric lens</div>
+          </div>
+          <div class="panel metric-card p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Line Items</div>
+            <div id="kpiLines" class="text-3xl font-bold mt-2 mono">0</div>
+            <div class="text-xs text-slate-500 mt-2">Searchable detail rows</div>
+          </div>
+          <div class="panel metric-card p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg PO Value</div>
+            <div id="kpiAvgPO" class="text-3xl font-bold mt-2 mono">$0</div>
+            <div class="text-xs text-slate-500 mt-2">Total / unique POs</div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <div class="panel p-4 h-[340px]">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold">Top Vendors by Ordered Amount</h3>
+              <span class="text-xs text-slate-500">Click a bar to drill down</span>
+            </div>
+            <canvas id="vendorChart"></canvas>
+          </div>
+          <div class="panel p-4 h-[340px]">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold">Ordered Amount by Category</h3>
+              <span class="text-xs text-slate-500">Cost / category lens</span>
+            </div>
+            <canvas id="categoryChart"></canvas>
+          </div>
+          <div class="panel p-4 h-[340px]">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold">PO Count by Status</h3>
+              <span class="text-xs text-slate-500">Operational status view</span>
+            </div>
+            <canvas id="statusChart"></canvas>
+          </div>
+          <div class="panel p-4 h-[340px]">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold">Ordered Amount by PO Month</h3>
+              <span class="text-xs text-slate-500">Trend view</span>
+            </div>
+            <canvas id="trendChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel p-4 detail-heavy">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="flex flex-wrap gap-2">
+              <button class="tab-btn active px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="lines">Line Items</button>
+              <button class="tab-btn px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="po">PO Summary</button>
+              <button class="tab-btn px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="vendor">Vendor Summary</button>
+              <button class="tab-btn px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="proposal">Proposal / Estimate / T&amp;M</button>
+              <button class="tab-btn px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="matrix">Matrix / Crosstab</button>
+              <button class="tab-btn px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold" data-tab="exceptions">Exceptions</button>
+            </div>
+            <div id="viewMeta" class="text-xs text-slate-500 font-semibold">Current view: Line Items</div>
+          </div>
+
+          <div id="tab-lines" class="tab-panel space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-sm text-slate-600">Full-detail rows. Click any row for drilldown.</div>
+              <div id="linesCount" class="text-xs font-semibold text-slate-500"></div>
+            </div>
+            <div class="overflow-auto max-h-[520px] sticky-thead">
+              <table class="min-w-full text-sm">
+                <thead><tr id="linesHead"></tr></thead>
+                <tbody id="linesBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tab-po" class="tab-panel hidden space-y-3">
+            <div class="text-sm text-slate-600">One row per PO with sortable metrics.</div>
+            <div class="overflow-auto max-h-[520px] sticky-thead">
+              <table class="min-w-full text-sm">
+                <thead><tr id="poHead"></tr></thead>
+                <tbody id="poBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tab-vendor" class="tab-panel hidden space-y-3">
+            <div class="text-sm text-slate-600">Vendor summary with spend concentration and PO counts.</div>
+            <div class="overflow-auto max-h-[520px] sticky-thead">
+              <table class="min-w-full text-sm">
+                <thead><tr id="vendorHead"></tr></thead>
+                <tbody id="vendorBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          
+          <div id="tab-proposal" class="tab-panel hidden space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="text-sm text-slate-600">Commercial build-up view for procurement planning, cost proposals, estimates, and T&amp;M basis creation. Grouped by vendor, category, cost code, and description.</div>
+              <div class="text-xs text-slate-500 font-semibold">Tip: click any row to open supporting line items.</div>
+            </div>
+            <div class="overflow-auto max-h-[520px] sticky-thead">
+              <table class="min-w-full text-sm">
+                <thead><tr id="proposalHead"></tr></thead>
+                <tbody id="proposalBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tab-matrix" class="tab-panel hidden space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              <div>
+                <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Rows</label>
+                <select id="matrixRows" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"></select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Columns</label>
+                <select id="matrixCols" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"></select>
+              </div>
+              <div>
+                <label class="block text-xs uppercase tracking-wide text-slate-500 font-bold mb-1">Metric</label>
+                <select id="matrixMetric" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
+                  <option value="amount">Sum of Ordered Amount</option>
+                  <option value="count">Line Count</option>
+                  <option value="poCount">Unique PO Count</option>
+                </select>
+              </div>
+              <div>
+                <button id="swapMatrixBtn" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold hover:bg-slate-50">Swap Rows / Columns</button>
+              </div>
+            </div>
+            <div class="overflow-auto max-h-[520px]">
+              <div id="matrixWrap"></div>
+            </div>
+          </div>
+
+          <div id="tab-exceptions" class="tab-panel hidden space-y-3">
+            <div class="text-sm text-slate-600">Quick diagnostic checks to help engineers and executives find unusual, incomplete, or decision-sensitive records.</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3" id="exceptionCards"></div>
+            <div class="overflow-auto max-h-[420px] sticky-thead">
+              <table class="min-w-full text-sm">
+                <thead><tr id="exceptionHead"></tr></thead>
+                <tbody id="exceptionBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold text-slate-800">Professional Use Note</div>
+            <div class="text-xs text-slate-500">Built for procurement review, cost proposal development, estimate support, and T&amp;M creation workflows.</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-semibold text-slate-800">George Oktem</div>
+            <div class="text-xs text-slate-500">IPC Resiliency Partners · East River Park, New York</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside id="drawer" class="w-[420px] max-w-[95vw] h-full bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 drawer-closed fixed right-0 top-0 z-30 flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <div class="text-sm uppercase tracking-wide text-slate-500 font-bold">Drilldown</div>
+          <div id="drawerTitle" class="text-lg font-bold">Details</div>
+        </div>
+        <button id="drawerClose" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50">Close</button>
+      </div>
+      <div id="drawerBody" class="flex-1 overflow-y-auto p-5 space-y-4"></div>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  const DEFAULT_CSV_PATH = ['https://','raw.','git','hubusercontent','.', 'com/','yazilimlar/','exports4george/','main/','PO_GOODS_IN_TRANSIT_LOG_George2026csv.csv'].join('');
+  const DEFAULT_CSV_FALLBACKS = [
+    DEFAULT_CSV_PATH,
+    'https://cdn.jsdelivr.net/gh/yazilimlar/exports4george@main/PO_GOODS_IN_TRANSIT_LOG_George2026csv.csv',
+    './PO_GOODS_IN_TRANSIT_LOG_George2026csv.csv'
+  ];
+
+  const state = {
+    rawRows: [],
+    filteredRows: [],
+    currentTab: 'lines',
+    linesSort: { key: 'amount', dir: 'desc' },
+    poSort: { key: 'amount', dir: 'desc' },
+    vendorSort: { key: 'amount', dir: 'desc' },
+    proposalSort: { key: 'amount', dir: 'desc' },
+    exceptionSort: { key: 'issue', dir: 'asc' },
+    charts: {},
+    matrixRows: 'vendor',
+    matrixCols: 'category',
+    matrixMetric: 'amount',
+  };
+
+  const els = {
+    subtitle: document.getElementById('subtitle'),
+    fileInput: document.getElementById('fileInput'),
+    loadDefaultBtn: document.getElementById('loadDefaultBtn'),
+    exportBtn: document.getElementById('exportBtn'),
+    globalSearch: document.getElementById('globalSearch'),
+    vendorFilter: document.getElementById('vendorFilter'),
+    categoryFilter: document.getElementById('categoryFilter'),
+    statusFilter: document.getElementById('statusFilter'),
+    dateFieldFilter: document.getElementById('dateFieldFilter'),
+    dateFrom: document.getElementById('dateFrom'),
+    dateTo: document.getElementById('dateTo'),
+    dataNotice: document.getElementById('dataNotice'),
+    resetBtn: document.getElementById('resetBtn'),
+    toggleTipsBtn: document.getElementById('toggleTipsBtn'),
+    tipsBox: document.getElementById('tipsBox'),
+    kpiAmount: document.getElementById('kpiAmount'),
+    kpiPOs: document.getElementById('kpiPOs'),
+    kpiVendors: document.getElementById('kpiVendors'),
+    kpiLines: document.getElementById('kpiLines'),
+    kpiAvgPO: document.getElementById('kpiAvgPO'),
+    viewMeta: document.getElementById('viewMeta'),
+    liveDateTime: document.getElementById('liveDateTime'),
+    summaryModeBtn: document.getElementById('summaryModeBtn'),
+    slicerPanel: document.getElementById('slicerPanel'),
+    slicerBody: document.getElementById('slicerBody'),
+    collapseSlicerBtn: document.getElementById('collapseSlicerBtn'),
+    detachSlicerBtn: document.getElementById('detachSlicerBtn'),
+    summaryNarrative: document.getElementById('summaryNarrative'),
+    summaryTopVendor: document.getElementById('summaryTopVendor'),
+    summaryTopVendorMeta: document.getElementById('summaryTopVendorMeta'),
+    summaryTopCategory: document.getElementById('summaryTopCategory'),
+    summaryTopCategoryMeta: document.getElementById('summaryTopCategoryMeta'),
+    appHeader: document.getElementById('appHeader'),
+    proposalHead: document.getElementById('proposalHead'),
+    proposalBody: document.getElementById('proposalBody'),
+    linesCount: document.getElementById('linesCount'),
+    linesHead: document.getElementById('linesHead'),
+    linesBody: document.getElementById('linesBody'),
+    poHead: document.getElementById('poHead'),
+    poBody: document.getElementById('poBody'),
+    vendorHead: document.getElementById('vendorHead'),
+    vendorBody: document.getElementById('vendorBody'),
+    matrixRows: document.getElementById('matrixRows'),
+    matrixCols: document.getElementById('matrixCols'),
+    matrixMetric: document.getElementById('matrixMetric'),
+    matrixWrap: document.getElementById('matrixWrap'),
+    swapMatrixBtn: document.getElementById('swapMatrixBtn'),
+    exceptionCards: document.getElementById('exceptionCards'),
+    exceptionHead: document.getElementById('exceptionHead'),
+    exceptionBody: document.getElementById('exceptionBody'),
+    drawer: document.getElementById('drawer'),
+    drawerTitle: document.getElementById('drawerTitle'),
+    drawerBody: document.getElementById('drawerBody'),
+    drawerClose: document.getElementById('drawerClose'),
+  };
+
+  const lineColumns = [
+    { key: 'po', label: 'PO Number', type: 'text' },
+    { key: 'vendor', label: 'Vendor', type: 'text' },
+    { key: 'itemName', label: 'Description / Item', type: 'text' },
+    { key: 'comment', label: 'Comment', type: 'text' },
+    { key: 'costCode', label: 'Cost Code', type: 'text' },
+    { key: 'category', label: 'Category', type: 'text' },
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'poDateObj', label: 'PO Date', type: 'date' },
+    { key: 'amount', label: 'Ordered Amount', type: 'money' },
+  ];
+
+  const poColumns = [
+    { key: 'po', label: 'PO Number', type: 'text' },
+    { key: 'vendor', label: 'Primary Vendor', type: 'text' },
+    { key: 'categoryList', label: 'Categories', type: 'text' },
+    { key: 'lineCount', label: 'Line Count', type: 'number' },
+    { key: 'amount', label: 'Ordered Amount', type: 'money' },
+    { key: 'receiptQty', label: 'Receipt Qty', type: 'number' },
+    { key: 'latestPODate', label: 'Latest PO Date', type: 'date' },
+  ];
+
+  const vendorColumns = [
+    { key: 'vendor', label: 'Vendor', type: 'text' },
+    { key: 'vendorCode', label: 'Vendor Code', type: 'text' },
+    { key: 'poCount', label: 'Unique POs', type: 'number' },
+    { key: 'lineCount', label: 'Line Count', type: 'number' },
+    { key: 'amount', label: 'Ordered Amount', type: 'money' },
+    { key: 'avgPO', label: 'Avg PO Value', type: 'money' },
+    { key: 'topCategory', label: 'Top Category', type: 'text' },
+  ];
+
+  const exceptionColumns = [
+    { key: 'issue', label: 'Issue', type: 'text' },
+    { key: 'po', label: 'PO Number', type: 'text' },
+    { key: 'vendor', label: 'Vendor', type: 'text' },
+    { key: 'itemName', label: 'Description / Item', type: 'text' },
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'amount', label: 'Ordered Amount', type: 'money' },
+  ];
+
+  const matrixFieldOptions = [
+    { value: 'vendor', label: 'Vendor' },
+    { value: 'po', label: 'PO Number' },
+    { value: 'category', label: 'Category' },
+    { value: 'status', label: 'Status' },
+    { value: 'costCode', label: 'Cost Code' },
+    { value: 'poMonth', label: 'PO Month' },
+  ];
+
+  function formatMoney(n) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n || 0));
+  }
+  function formatNumber(n) {
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Number(n || 0));
+  }
+  function safeText(v) {
+    return (v ?? '').toString().trim();
+  }
+  function parseNumber(v) {
+    if (v == null || v === '') return 0;
+    const cleaned = String(v).replace(/[$,]/g, '').replace(/[()]/g, m => m === '(' ? '-' : '');
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : 0;
+  }
+  function parseDate(v) {
+    const txt = safeText(v);
+    if (!txt) return null;
+    const dt = new Date(txt);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  function formatDate(dt) {
+    if (!dt) return '';
+    return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  function parseInputDate(v, endOfDay = false) {
+    if (!v) return null;
+    const dt = new Date(`${v}T${endOfDay ? '23:59:59' : '00:00:00'}`);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  function setNotice(msg = '', tone = 'amber') {
+    if (!els.dataNotice) return;
+    if (!msg) {
+      els.dataNotice.className = 'hidden mt-3 text-xs rounded-xl px-4 py-3';
+      els.dataNotice.textContent = '';
+      return;
+    }
+    const tones = {
+      amber: 'mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3',
+      blue: 'mt-3 text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3',
+      green: 'mt-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3'
+    };
+    els.dataNotice.className = tones[tone] || tones.amber;
+    els.dataNotice.textContent = msg;
+  }
+  function statusChip(status) {
+    const s = safeText(status).toLowerCase();
+    if (s.includes('accept') || s.includes('receive')) return `<span class="chip bg-emerald-100 text-emerald-700">${escapeHtml(status || 'Accepted')}</span>`;
+    if (s.includes('pend')) return `<span class="chip bg-amber-100 text-amber-800">${escapeHtml(status || 'Pending')}</span>`;
+    if (s.includes('close')) return `<span class="chip bg-slate-200 text-slate-700">${escapeHtml(status || 'Closed')}</span>`;
+    return `<span class="chip bg-blue-100 text-blue-700">${escapeHtml(status || 'Open')}</span>`;
+  }
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  }
+  function valueForField(row, key) {
+    if (key === 'poMonth') return row.poMonth || 'Unknown';
+    return row[key] ?? 'Unknown';
+  }
+
+  function detectHeaderIndex(text) {
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+      const line = lines[i].toLowerCase();
+      if (line.includes('ven name') && line.includes('po num') && line.includes('total ord amt')) return i;
+    }
+    return 0;
+  }
+
+  function normalizeRows(rows) {
+    return rows
+      .map((r, idx) => {
+        const poDateObj = parseDate(r['Po Date']);
+        const receiptDateObj = parseDate(r['Receipt Date']);
+        const invoiceDateObj = parseDate(r['Invoice Post Date']);
+        const amount = parseNumber(r['Total Ord Amt'] || r['Ord Amt']);
+        const receiptQty = parseNumber(r['Receipt Qty']);
+        const ordQty = parseNumber(r['Ord Qty']);
+        const toMatchAmt = parseNumber(r['To Match Amt']);
+        const invoiceAmt = parseNumber(r['Invoice Amt']);
+        const vendor = safeText(r['Ven Name']) || 'Unknown Vendor';
+        const itemName = safeText(r['Item Name']);
+        const comment = safeText(r['Comment']);
+        const status = safeText(r['Stat Desc'] || r['Line Stat Code']) || 'Unknown';
+        const obj = {
+          __id: idx + 1,
+          raw: r,
+          companyCode: safeText(r['Company Code']),
+          vendorCode: safeText(r['Ven Code']),
+          vendor,
+          po: safeText(r['Po Num']) || 'Unknown PO',
+          poDate: safeText(r['Po Date']),
+          poDateObj,
+          poMonth: poDateObj ? `${poDateObj.getFullYear()}-${String(poDateObj.getMonth()+1).padStart(2,'0')}` : 'Unknown',
+          job: safeText(r['Job']),
+          costCode: safeText(r['Cost Code']),
+          category: safeText(r['Category']) || 'Uncategorized',
+          invoiceCode: safeText(r['Invoice Code']),
+          invoiceDate: safeText(r['Invoice Post Date']),
+          invoiceDateObj,
+          invoiceQty: parseNumber(r['Invoice Qty']),
+          invoiceAmt,
+          invoiceVoidFlag: safeText(r['Invoice Void Flag']),
+          itemCode: safeText(r['Item Code']),
+          itemName,
+          comment,
+          lineNum: safeText(r['Line Num'] || r['Line Number']),
+          lineStatusCode: safeText(r['Line Stat Code']),
+          ordAmt: parseNumber(r['Ord Amt']),
+          ordPriceAmt: parseNumber(r['Ord Price Amt']),
+          ordQty,
+          receiptDate: safeText(r['Receipt Date']),
+          receiptDateObj,
+          receiptPostDate: safeText(r['Receipt Post Date']),
+          receiptPriceAmt: parseNumber(r['Receipt Price Amt']),
+          receiptQty,
+          claimQty: parseNumber(r['Claim Qty']),
+          rejectQty: parseNumber(r['Reject Qty']),
+          shiplistNum: safeText(r['Shiplist Num']),
+          status,
+          toInvoiceQty: parseNumber(r['To Invoice Qty']),
+          toMatchAmt,
+          toMatchPriceAmt: parseNumber(r['To Match Price Amt']),
+          toMatchQty: parseNumber(r['To Match Qty']),
+          amount,
+        };
+        obj.searchBlob = [
+          obj.companyCode, obj.vendorCode, obj.vendor, obj.po, obj.job, obj.costCode, obj.category,
+          obj.invoiceCode, obj.itemCode, obj.itemName, obj.comment, obj.lineNum, obj.lineStatusCode,
+          obj.status, obj.poDate, obj.receiptDate, obj.receiptPostDate, obj.shiplistNum
+        ].join(' | ').toLowerCase();
+        return obj;
+      })
+      .filter(r => r.po && r.po !== 'Unknown PO');
+  }
+
+  function parseCsvText(text, label = 'Loaded CSV') {
+    const headerIndex = detectHeaderIndex(text);
+    const lines = text.split(/\r?\n/).slice(headerIndex).join('\n');
+    Papa.parse(lines, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const data = results.data || [];
+        if (!data.length) {
+          alert('No rows were parsed from the CSV.');
+          return;
+        }
+        state.rawRows = normalizeRows(data);
+        els.subtitle.textContent = `${label} — ${state.rawRows.length.toLocaleString()} line items loaded`;
+        if (label) setNotice(`${label} loaded with ${state.rawRows.length.toLocaleString()} line items.`, 'green');
+        populateFilters();
+        populateMatrixSelectors();
+        applyFilters();
+      },
+      error: () => alert('CSV parse failed.')
+    });
+  }
+
+  async function loadDefaultCsv() {
+    let lastErr = null;
+    setNotice('Attempting to load the default connected dataset…', 'blue');
+    for (const path of DEFAULT_CSV_FALLBACKS) {
+      try {
+        const res = await fetch(path, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        const decoder = new TextDecoder('windows-1252');
+        parseCsvText(decoder.decode(buffer), path.startsWith('http') ? 'Connected Dataset' : 'Local CSV');
+        setNotice('Default dataset loaded successfully.', 'green');
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.warn('CSV load attempt failed for default source', err);
+      }
+    }
+    setNotice('The default dataset could not be reached right now. This can happen due to browser security rules, network interruptions, cache timing, or temporary remote-file availability. You can still load the CSV manually with Upload CSV.', 'amber');
+    console.error(lastErr);
+  }
+
+  function populateFilters() {
+    fillSelect(els.vendorFilter, ['All', ...uniqueSorted(state.rawRows.map(r => r.vendor))]);
+    fillSelect(els.categoryFilter, ['All', ...uniqueSorted(state.rawRows.map(r => r.category))]);
+    fillSelect(els.statusFilter, ['All', ...uniqueSorted(state.rawRows.map(r => r.status))]);
+  }
+
+  function populateMatrixSelectors() {
+    const html = matrixFieldOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+    els.matrixRows.innerHTML = html;
+    els.matrixCols.innerHTML = html;
+    els.matrixRows.value = state.matrixRows;
+    els.matrixCols.value = state.matrixCols;
+    els.matrixMetric.value = state.matrixMetric;
+  }
+
+  function fillSelect(select, arr) {
+    const current = select.value || 'All';
+    select.innerHTML = arr.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+  }
+
+  function uniqueSorted(arr) {
+    return [...new Set(arr.filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b)));
+  }
+
+  function applyFilters() {
+    const searchTokens = safeText(els.globalSearch.value).toLowerCase().split(/\s+/).filter(Boolean);
+    const vendor = els.vendorFilter.value || 'All';
+    const category = els.categoryFilter.value || 'All';
+    const status = els.statusFilter.value || 'All';
+    const dateField = els.dateFieldFilter.value || 'poDateObj';
+    const fromDate = parseInputDate(els.dateFrom.value, false);
+    const toDate = parseInputDate(els.dateTo.value, true);
+
+    state.filteredRows = state.rawRows.filter(r => {
+      if (vendor !== 'All' && r.vendor !== vendor) return false;
+      if (category !== 'All' && r.category !== category) return false;
+      if (status !== 'All' && r.status !== status) return false;
+      if (searchTokens.length && !searchTokens.every(tok => r.searchBlob.includes(tok))) return false;
+      const dt = r[dateField] || null;
+      if (fromDate && (!dt || dt < fromDate)) return false;
+      if (toDate && (!dt || dt > toDate)) return false;
+      return true;
+    });
+
+    renderAll();
+  }
+
+  function renderAll() {
+    renderKPIs();
+    renderCharts();
+    renderLinesTable();
+    renderPOSummary();
+    renderVendorSummary();
+    renderProposalSummary();
+    renderMatrix();
+    renderExceptions();
+  }
+
+
+  function animateValue(el, endValue, formatter, isMoney = false) {
+    if (!el) return;
+    const target = Number(endValue || 0);
+    const current = Number(el.dataset.value || 0);
+    const start = isFinite(current) ? current : 0;
+    const diff = target - start;
+    const duration = 420;
+    const startTime = performance.now();
+    el.classList.remove('kpi-pop');
+    void el.offsetWidth;
+    el.classList.add('kpi-pop');
+    function frame(now) {
+      const p = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const value = start + diff * eased;
+      el.textContent = formatter(value);
+      if (p < 1) requestAnimationFrame(frame);
+      else {
+        el.textContent = formatter(target);
+        el.dataset.value = String(target);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function renderExecutiveSummary(rows, totalAmt, uniquePOs, uniqueVendors, avgPO) {
+    const vendorAgg = aggregate(rows, 'vendor', 'amount', 1)[0];
+    const catAgg = aggregate(rows, 'category', 'amount', 1)[0];
+    const statusAgg = aggregate(rows, 'status', 'poCount', 3);
+    const statusText = statusAgg.map(x => `${x.key}: ${formatNumber(x.poCount)} POs`).join(' · ') || 'No status distribution available.';
+    const narrative = rows.length
+      ? `Current filtered exposure is ${formatMoney(totalAmt)} across ${formatNumber(uniquePOs)} POs, ${formatNumber(uniqueVendors)} vendors, and ${formatNumber(rows.length)} line items. Average PO value is ${formatMoney(avgPO)}. Top operational concentrations are ${statusText}. This view can support procurement review, estimate basis development, and T&M benchmarking.`
+      : 'No records are available under the current filters. Reset or widen the date range / slicers to restore executive visibility.';
+    if (els.summaryNarrative) els.summaryNarrative.textContent = narrative;
+    if (els.summaryTopVendor) els.summaryTopVendor.textContent = vendorAgg?.key || '—';
+    if (els.summaryTopVendorMeta) els.summaryTopVendorMeta.textContent = vendorAgg ? `${formatMoney(vendorAgg.amount)} across ${formatNumber(vendorAgg.poCount)} POs` : 'No vendor concentration found.';
+    if (els.summaryTopCategory) els.summaryTopCategory.textContent = catAgg?.key || '—';
+    if (els.summaryTopCategoryMeta) els.summaryTopCategoryMeta.textContent = catAgg ? `${formatMoney(catAgg.amount)} in ordered value` : 'No category concentration found.';
+  }
+
+  function renderKPIs() {
+    const rows = state.filteredRows;
+    const totalAmt = rows.reduce((a,r) => a + r.amount, 0);
+    const uniquePOs = new Set(rows.map(r => r.po)).size;
+    const uniqueVendors = new Set(rows.map(r => r.vendor)).size;
+    const avgPO = uniquePOs ? totalAmt / uniquePOs : 0;
+    animateValue(els.kpiAmount, totalAmt, v => formatMoney(v), true);
+    animateValue(els.kpiPOs, uniquePOs, v => formatNumber(Math.round(v)));
+    animateValue(els.kpiVendors, uniqueVendors, v => formatNumber(Math.round(v)));
+    animateValue(els.kpiLines, rows.length, v => formatNumber(Math.round(v)));
+    animateValue(els.kpiAvgPO, avgPO, v => formatMoney(v), true);
+    els.linesCount.textContent = `${rows.length.toLocaleString()} filtered line items`;
+    renderExecutiveSummary(rows, totalAmt, uniquePOs, uniqueVendors, avgPO);
+  }
+
+  function makeChart(id, type, labels, data, onClick) {
+    if (state.charts[id]) state.charts[id].destroy();
+    const ctx = document.getElementById(id).getContext('2d');
+    state.charts[id] = new Chart(ctx, {
+      type,
+      data: {
+        labels,
+        datasets: [{
+          data,
+          label: id,
+          borderWidth: 1,
+          borderRadius: type === 'bar' ? 6 : 0,
+          backgroundColor: ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#64748b','#e11d48','#65a30d','#ea580c'],
+          borderColor: '#fff',
+          fill: type === 'line' ? false : true,
+          tension: .25,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: type !== 'bar' ? true : false } },
+        scales: type === 'doughnut' ? {} : {
+          y: { beginAtZero: true, ticks: { callback: v => type === 'line' ? `$${Math.round(v/1000)}k` : `$${Math.round(v/1000)}k` } },
+          x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } }
+        },
+        onClick: (_, activeEls) => {
+          if (!activeEls.length || !onClick) return;
+          const idx = activeEls[0].index;
+          onClick(labels[idx]);
+        }
+      }
+    });
+  }
+
+  function aggregate(rows, field, metric = 'amount', topN = null) {
+    const map = new Map();
+    rows.forEach(r => {
+      const key = valueForField(r, field) || 'Unknown';
+      if (!map.has(key)) map.set(key, { amount: 0, count: 0, poSet: new Set() });
+      const x = map.get(key);
+      x.amount += r.amount;
+      x.count += 1;
+      x.poSet.add(r.po);
+    });
+    let arr = [...map.entries()].map(([k, v]) => ({ key: k, amount: v.amount, count: v.count, poCount: v.poSet.size }));
+    arr.sort((a,b) => (metric === 'count' ? b.count - a.count : metric === 'poCount' ? b.poCount - a.poCount : b.amount - a.amount));
+    if (topN) arr = arr.slice(0, topN);
+    return arr;
+  }
+
+  function renderCharts() {
+    const vendorAgg = aggregate(state.filteredRows, 'vendor', 'amount', 10);
+    makeChart('vendorChart', 'bar', vendorAgg.map(x => x.key), vendorAgg.map(x => x.amount), vendor => {
+      openDrawer(`Vendor — ${vendor}`, state.filteredRows.filter(r => r.vendor === vendor));
+    });
+
+    const catAgg = aggregate(state.filteredRows, 'category', 'amount', 10);
+    makeChart('categoryChart', 'doughnut', catAgg.map(x => x.key), catAgg.map(x => x.amount), category => {
+      openDrawer(`Category — ${category}`, state.filteredRows.filter(r => r.category === category));
+    });
+
+    const statusAgg = aggregate(state.filteredRows, 'status', 'poCount', 10);
+    makeChart('statusChart', 'bar', statusAgg.map(x => x.key), statusAgg.map(x => x.poCount), status => {
+      openDrawer(`Status — ${status}`, state.filteredRows.filter(r => r.status === status));
+    });
+
+    const trendAgg = aggregate(state.filteredRows.filter(r => r.poMonth !== 'Unknown'), 'poMonth', 'amount');
+    makeChart('trendChart', 'line', trendAgg.map(x => x.key), trendAgg.map(x => x.amount), month => {
+      openDrawer(`PO Month — ${month}`, state.filteredRows.filter(r => r.poMonth === month));
+    });
+  }
+
+  function sortRows(rows, sortObj) {
+    const { key, dir } = sortObj;
+    const mul = dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a,b) => {
+      const av = a[key] ?? '';
+      const bv = b[key] ?? '';
+      if (av instanceof Date || bv instanceof Date) return (((av?.getTime?.() || 0) - (bv?.getTime?.() || 0)) * mul);
+      if (typeof av === 'number' || typeof bv === 'number') return ((Number(av || 0) - Number(bv || 0)) * mul);
+      return String(av).localeCompare(String(bv)) * mul;
+    });
+  }
+
+  function renderTableHead(target, columns, sortObj, tableType) {
+    target.innerHTML = columns.map(c => {
+      const arrow = sortObj.key === c.key ? (sortObj.dir === 'asc' ? ' ▲' : ' ▼') : '';
+      return `<th class="px-4 py-3 text-left text-xs uppercase tracking-wide text-slate-500 font-bold sortable" data-table="${tableType}" data-key="${c.key}">${escapeHtml(c.label)}${arrow}</th>`;
+    }).join('');
+  }
+
+  function renderCell(row, col) {
+    const v = row[col.key];
+    if (col.type === 'money') return `<td class="px-4 py-3 mono text-right font-semibold">${formatMoney(v)}</td>`;
+    if (col.type === 'number') return `<td class="px-4 py-3 mono text-right">${formatNumber(v)}</td>`;
+    if (col.type === 'date') return `<td class="px-4 py-3">${formatDate(v)}</td>`;
+    if (col.key === 'status') return `<td class="px-4 py-3">${statusChip(v)}</td>`;
+    return `<td class="px-4 py-3">${escapeHtml(v)}</td>`;
+  }
+
+  function renderLinesTable() {
+    renderTableHead(els.linesHead, lineColumns, state.linesSort, 'lines');
+    const rows = sortRows(state.filteredRows, state.linesSort).slice(0, 1500);
+    if (!rows.length) {
+      els.linesBody.innerHTML = `<tr><td class="px-4 py-8 text-slate-500" colspan="${lineColumns.length}">No matching rows.</td></tr>`;
+      return;
+    }
+    els.linesBody.innerHTML = rows.map(r => `
+      <tr class="hover:bg-slate-50 cursor-pointer" data-row-id="${r.__id}" data-row-type="line">
+        ${lineColumns.map(c => renderCell(r,c)).join('')}
+      </tr>
+    `).join('');
+  }
+
+  function buildPOSummary() {
+    const map = new Map();
+    state.filteredRows.forEach(r => {
+      if (!map.has(r.po)) {
+        map.set(r.po, {
+          po: r.po,
+          vendor: r.vendor,
+          categorySet: new Set(),
+          lineCount: 0,
+          amount: 0,
+          receiptQty: 0,
+          latestPODate: r.poDateObj,
+        });
+      }
+      const x = map.get(r.po);
+      x.categorySet.add(r.category);
+      x.lineCount += 1;
+      x.amount += r.amount;
+      x.receiptQty += r.receiptQty;
+      if ((r.poDateObj?.getTime?.() || 0) > (x.latestPODate?.getTime?.() || 0)) x.latestPODate = r.poDateObj;
+    });
+    return [...map.values()].map(x => ({ ...x, categoryList: [...x.categorySet].join(', ') }));
+  }
+
+  function renderPOSummary() {
+    const rows = sortRows(buildPOSummary(), state.poSort);
+    renderTableHead(els.poHead, poColumns, state.poSort, 'po');
+    if (!rows.length) {
+      els.poBody.innerHTML = `<tr><td class="px-4 py-8 text-slate-500" colspan="${poColumns.length}">No matching POs.</td></tr>`;
+      return;
+    }
+    els.poBody.innerHTML = rows.map(r => `
+      <tr class="hover:bg-slate-50 cursor-pointer" data-row-key="${escapeHtml(r.po)}" data-row-type="po">
+        ${poColumns.map(c => renderCell(r,c)).join('')}
+      </tr>
+    `).join('');
+  }
+
+  function buildVendorSummary() {
+    const map = new Map();
+    state.filteredRows.forEach(r => {
+      if (!map.has(r.vendor)) {
+        map.set(r.vendor, {
+          vendor: r.vendor,
+          vendorCode: r.vendorCode,
+          poSet: new Set(),
+          lineCount: 0,
+          amount: 0,
+          categoryAmt: new Map(),
+        });
+      }
+      const x = map.get(r.vendor);
+      x.poSet.add(r.po);
+      x.lineCount += 1;
+      x.amount += r.amount;
+      x.categoryAmt.set(r.category, (x.categoryAmt.get(r.category) || 0) + r.amount);
+    });
+    return [...map.values()].map(x => {
+      const topCategory = [...x.categoryAmt.entries()].sort((a,b) => b[1]-a[1])[0]?.[0] || '';
+      const poCount = x.poSet.size;
+      return {
+        vendor: x.vendor,
+        vendorCode: x.vendorCode,
+        poCount,
+        lineCount: x.lineCount,
+        amount: x.amount,
+        avgPO: poCount ? x.amount / poCount : 0,
+        topCategory,
+      };
+    });
+  }
+
+  function renderVendorSummary() {
+    const rows = sortRows(buildVendorSummary(), state.vendorSort);
+    renderTableHead(els.vendorHead, vendorColumns, state.vendorSort, 'vendor');
+    if (!rows.length) {
+      els.vendorBody.innerHTML = `<tr><td class="px-4 py-8 text-slate-500" colspan="${vendorColumns.length}">No matching vendors.</td></tr>`;
+      return;
+    }
+    els.vendorBody.innerHTML = rows.map(r => `
+      <tr class="hover:bg-slate-50 cursor-pointer" data-row-key="${escapeHtml(r.vendor)}" data-row-type="vendor">
+        ${vendorColumns.map(c => renderCell(r,c)).join('')}
+      </tr>
+    `).join('');
+  }
+
+  function renderMatrix() {
+    state.matrixRows = els.matrixRows.value;
+    state.matrixCols = els.matrixCols.value;
+    state.matrixMetric = els.matrixMetric.value;
+    const rowKeys = uniqueSorted(state.filteredRows.map(r => valueForField(r, state.matrixRows) || 'Unknown')).slice(0, 25);
+    const colKeys = uniqueSorted(state.filteredRows.map(r => valueForField(r, state.matrixCols) || 'Unknown')).slice(0, 16);
+    const map = new Map();
+
+    state.filteredRows.forEach(r => {
+      const rk = valueForField(r, state.matrixRows) || 'Unknown';
+      const ck = valueForField(r, state.matrixCols) || 'Unknown';
+      if (!rowKeys.includes(rk) || !colKeys.includes(ck)) return;
+      const key = `${rk}|||${ck}`;
+      if (!map.has(key)) map.set(key, { amount: 0, count: 0, poSet: new Set() });
+      const x = map.get(key);
+      x.amount += r.amount;
+      x.count += 1;
+      x.poSet.add(r.po);
+    });
+
+    const metricFn = (cell) => {
+      if (!cell) return 0;
+      if (state.matrixMetric === 'count') return cell.count;
+      if (state.matrixMetric === 'poCount') return cell.poSet.size;
+      return cell.amount;
+    };
+
+    const html = `
+      <table class="min-w-full text-sm matrix-table border border-slate-200 rounded-xl overflow-hidden">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left sticky left-0 bg-slate-50 z-10 border-b border-r border-slate-200">${escapeHtml(labelForField(state.matrixRows))} \ ${escapeHtml(labelForField(state.matrixCols))}</th>
+            ${colKeys.map(c => `<th class="px-3 py-2 text-right whitespace-nowrap border-b border-r border-slate-200">${escapeHtml(c)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rowKeys.map(rk => `
+            <tr>
+              <th class="px-3 py-2 text-left sticky left-0 bg-white z-10 border-b border-r border-slate-200">${escapeHtml(rk)}</th>
+              ${colKeys.map(ck => {
+                const cell = map.get(`${rk}|||${ck}`);
+                const val = metricFn(cell);
+                const display = state.matrixMetric === 'amount' ? formatMoney(val) : formatNumber(val);
+                return `<td class="px-3 py-2 text-right border-b border-r border-slate-100" data-clickable="1" data-rk="${escapeHtml(rk)}" data-ck="${escapeHtml(ck)}">${display}</td>`;
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+    els.matrixWrap.innerHTML = html;
+  }
+
+  function labelForField(v) {
+    return matrixFieldOptions.find(x => x.value === v)?.label || v;
+  }
+
+  function buildProposalSummary() {
+    const map = new Map();
+    state.filteredRows.forEach(r => {
+      const key = [r.vendor, r.category, r.costCode, r.itemName || ''].join('¦');
+      if (!map.has(key)) map.set(key, {
+        vendor: r.vendor,
+        category: r.category,
+        costCode: r.costCode,
+        itemName: r.itemName || '(blank description)',
+        poSet: new Set(),
+        lineCount: 0,
+        ordQty: 0,
+        amount: 0,
+        latestPODateObj: null,
+        latestPODate: '',
+      });
+      const rec = map.get(key);
+      rec.poSet.add(r.po);
+      rec.lineCount += 1;
+      rec.ordQty += Number(r.ordQty || 0);
+      rec.amount += Number(r.amount || 0);
+      if (r.poDateObj && (!rec.latestPODateObj || r.poDateObj > rec.latestPODateObj)) {
+        rec.latestPODateObj = r.poDateObj;
+        rec.latestPODate = r.poDate;
+      }
+    });
+    const rows = [...map.values()].map(r => ({
+      vendor: r.vendor,
+      category: r.category,
+      costCode: r.costCode,
+      itemName: r.itemName,
+      poCount: r.poSet.size,
+      lineCount: r.lineCount,
+      ordQty: r.ordQty,
+      amount: r.amount,
+      unitRate: r.ordQty ? r.amount / r.ordQty : 0,
+      latestPODate: r.latestPODate,
+      latestPODateObj: r.latestPODateObj,
+    }));
+    return sortRows(rows, state.proposalSort);
+  }
+
+  function renderProposalSummary() {
+    const rows = buildProposalSummary();
+    renderTableHead(els.proposalHead, proposalColumns, state.proposalSort, 'proposal');
+    const top = rows.slice(0, 500);
+    els.proposalBody.innerHTML = top.map(r => `
+      <tr class="hover:bg-slate-50 cursor-pointer" data-row-type="proposal" data-vendor="${escapeHtml(r.vendor)}" data-category="${escapeHtml(r.category)}" data-cost-code="${escapeHtml(r.costCode)}" data-item-name="${escapeHtml(r.itemName)}">
+        <td class="px-4 py-2">${escapeHtml(r.vendor)}</td>
+        <td class="px-4 py-2">${escapeHtml(r.category)}</td>
+        <td class="px-4 py-2 mono">${escapeHtml(r.costCode)}</td>
+        <td class="px-4 py-2">${escapeHtml(r.itemName)}</td>
+        <td class="px-4 py-2 text-right mono">${formatNumber(r.poCount)}</td>
+        <td class="px-4 py-2 text-right mono">${formatNumber(r.lineCount)}</td>
+        <td class="px-4 py-2 text-right mono">${formatNumber(r.ordQty)}</td>
+        <td class="px-4 py-2 text-right mono font-semibold">${formatMoney(r.amount)}</td>
+        <td class="px-4 py-2 text-right mono">${formatMoney(r.unitRate)}</td>
+        <td class="px-4 py-2">${escapeHtml(r.latestPODate)}</td>
+      </tr>`).join('') || '<tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">No proposal / estimate basis rows match the current filters.</td></tr>';
+  }
+
+  function buildExceptions() {
+    const rows = [];
+    state.filteredRows.forEach(r => {
+      if (!r.itemName) rows.push({ issue: 'Missing description', ...r });
+      if (!r.vendor || r.vendor === 'Unknown Vendor') rows.push({ issue: 'Missing vendor', ...r });
+      if (r.amount < 0) rows.push({ issue: 'Negative ordered amount', ...r });
+      if (r.ordQty < 0) rows.push({ issue: 'Negative ordered quantity', ...r });
+      if (r.receiptQty < 0) rows.push({ issue: 'Negative receipt quantity', ...r });
+      if (r.toMatchAmt > r.amount && r.amount !== 0) rows.push({ issue: 'To Match amount exceeds ordered amount', ...r });
+      if (!r.status || r.status === 'Unknown') rows.push({ issue: 'Missing status', ...r });
+    });
+    return sortRows(rows, state.exceptionSort);
+  }
+
+  function renderExceptions() {
+    const rows = buildExceptions();
+    renderTableHead(els.exceptionHead, exceptionColumns, state.exceptionSort, 'exception');
+    const counts = [
+      ['Missing description', rows.filter(r => r.issue === 'Missing description').length],
+      ['Negative amounts', rows.filter(r => r.issue === 'Negative ordered amount').length],
+      ['Negative quantities', rows.filter(r => r.issue.includes('quantity')).length],
+      ['To Match > Ordered', rows.filter(r => r.issue === 'To Match amount exceeds ordered amount').length],
+    ];
+    els.exceptionCards.innerHTML = counts.map(([label, value]) => `
+      <div class="panel p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">${escapeHtml(label)}</div>
+        <div class="text-3xl font-bold mt-2 mono">${formatNumber(value)}</div>
+      </div>`).join('');
+
+    if (!rows.length) {
+      els.exceptionBody.innerHTML = `<tr><td class="px-4 py-8 text-slate-500" colspan="${exceptionColumns.length}">No exceptions triggered under the current filters.</td></tr>`;
+      return;
+    }
+    els.exceptionBody.innerHTML = rows.slice(0, 1000).map(r => `
+      <tr class="hover:bg-slate-50 cursor-pointer" data-row-id="${r.__id}" data-row-type="line">
+        ${exceptionColumns.map(c => renderCell(r,c)).join('')}
+      </tr>`).join('');
+  }
+
+  function openDrawer(title, rows) {
+    els.drawerTitle.textContent = title;
+    const totalAmt = rows.reduce((a,r) => a + r.amount, 0);
+    const poCount = new Set(rows.map(r => r.po)).size;
+    const vendorCount = new Set(rows.map(r => r.vendor)).size;
+    const topRows = rows.slice().sort((a,b) => b.amount - a.amount).slice(0, 12);
+
+    els.drawerBody.innerHTML = `
+      <div class="grid grid-cols-3 gap-3">
+        <div class="panel p-3"><div class="text-xs uppercase text-slate-500 font-bold">Rows</div><div class="text-2xl font-bold mono mt-1">${formatNumber(rows.length)}</div></div>
+        <div class="panel p-3"><div class="text-xs uppercase text-slate-500 font-bold">POs</div><div class="text-2xl font-bold mono mt-1">${formatNumber(poCount)}</div></div>
+        <div class="panel p-3"><div class="text-xs uppercase text-slate-500 font-bold">Vendors</div><div class="text-2xl font-bold mono mt-1">${formatNumber(vendorCount)}</div></div>
+      </div>
+      <div class="panel p-4">
+        <div class="text-xs uppercase text-slate-500 font-bold">Filtered ordered amount</div>
+        <div class="text-3xl font-bold mono mt-1">${formatMoney(totalAmt)}</div>
+      </div>
+      <div class="space-y-3">
+        ${topRows.map(r => `
+          <div class="panel p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-bold">${escapeHtml(r.po)}</div>
+                <div class="text-sm text-slate-600 mt-1">${escapeHtml(r.vendor)}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold mono">${formatMoney(r.amount)}</div>
+                <div class="mt-1">${statusChip(r.status)}</div>
+              </div>
+            </div>
+            <div class="mt-3 text-sm text-slate-700"><span class="font-semibold">Description:</span> ${escapeHtml(r.itemName || '—')}</div>
+            <div class="mt-1 text-sm text-slate-700"><span class="font-semibold">Comment:</span> ${escapeHtml(r.comment || '—')}</div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+              <div><span class="font-semibold">Cost Code:</span> ${escapeHtml(r.costCode || '—')}</div>
+              <div><span class="font-semibold">Category:</span> ${escapeHtml(r.category || '—')}</div>
+              <div><span class="font-semibold">PO Date:</span> ${escapeHtml(r.poDate || '—')}</div>
+              <div><span class="font-semibold">Receipt Qty:</span> ${formatNumber(r.receiptQty)}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    `;
+    els.drawer.classList.remove('drawer-closed');
+    els.drawer.classList.add('drawer-open');
+  }
+
+  function closeDrawer() {
+    els.drawer.classList.remove('drawer-open');
+    els.drawer.classList.add('drawer-closed');
+  }
+
+  function setTab(tab) {
+    state.currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.getElementById(`tab-${tab}`).classList.remove('hidden');
+    els.viewMeta.textContent = `Current view: ${labelForTab(tab)}`;
+  }
+
+  function labelForTab(tab) {
+    return ({ lines: 'Line Items', po: 'PO Summary', vendor: 'Vendor Summary', proposal: 'Proposal / Estimate / T&M', matrix: 'Matrix / Crosstab', exceptions: 'Exceptions' })[tab] || tab;
+  }
+
+  function toggleSort(table, key) {
+    const stateKey = table === 'lines' ? 'linesSort' : table === 'po' ? 'poSort' : table === 'vendor' ? 'vendorSort' : table === 'proposal' ? 'proposalSort' : 'exceptionSort';
+    const sortObj = state[stateKey];
+    if (sortObj.key === key) sortObj.dir = sortObj.dir === 'asc' ? 'desc' : 'asc';
+    else { sortObj.key = key; sortObj.dir = 'asc'; }
+    renderAll();
+  }
+
+  function exportCurrentView() {
+    let data = [];
+    if (state.currentTab === 'lines') data = state.filteredRows.map(r => flatLineExport(r));
+    else if (state.currentTab === 'po') data = buildPOSummary();
+    else if (state.currentTab === 'vendor') data = buildVendorSummary();
+    else if (state.currentTab === 'exceptions') data = buildExceptions();
+    else {
+      alert('For Matrix view, export Line, PO, Vendor, or Exceptions view.');
+      return;
+    }
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ipc_procurment_log_${state.currentTab}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function flatLineExport(r) {
+    return {
+      PO_Number: r.po,
+      Vendor: r.vendor,
+      Vendor_Code: r.vendorCode,
+      Description: r.itemName,
+      Comment: r.comment,
+      Cost_Code: r.costCode,
+      Category: r.category,
+      Status: r.status,
+      PO_Date: r.poDate,
+      Receipt_Date: r.receiptDate,
+      Ordered_Amount: r.amount,
+      Ordered_Qty: r.ordQty,
+      Receipt_Qty: r.receiptQty,
+      To_Match_Amt: r.toMatchAmt,
+      Invoice_Amt: r.invoiceAmt,
+      Job: r.job,
+      Shiplist_Num: r.shiplistNum,
+    };
+  }
+
+
+  function setQuickDateRange(type) {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const dd = String(now.getDate()).padStart(2,'0');
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (type === 'clear') {
+      els.dateFrom.value = '';
+      els.dateTo.value = '';
+    } else if (type === 'this-month') {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      els.dateFrom.value = fmt(first);
+      els.dateTo.value = fmt(now);
+    } else if (type === 'last-month') {
+      const first = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      els.dateFrom.value = fmt(first);
+      els.dateTo.value = fmt(last);
+    } else if (type === 'ytd') {
+      els.dateFrom.value = `${yyyy}-01-01`;
+      els.dateTo.value = fmt(now);
+    } else if (type === 'last-90') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 90);
+      els.dateFrom.value = fmt(start);
+      els.dateTo.value = fmt(now);
+    }
+    applyFilters();
+  }
+
+  function toggleSummaryMode() {
+    document.body.classList.toggle('summary-mode');
+    const on = document.body.classList.contains('summary-mode');
+    if (els.summaryModeBtn) els.summaryModeBtn.textContent = on ? 'Exit Summary Mode' : 'Executive Summary Mode';
+  }
+
+  function initSlicerDrag() {
+    const panel = els.slicerPanel;
+    if (!panel) return;
+    const handle = panel.querySelector('.drag-handle');
+    let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+    handle.addEventListener('pointerdown', e => {
+      if (!panel.classList.contains('floating-detached')) return;
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = panel.getBoundingClientRect();
+      origLeft = rect.left;
+      origTop = rect.top;
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      panel.style.left = `${Math.max(8, origLeft + e.clientX - startX)}px`;
+      panel.style.top = `${Math.max(72, origTop + e.clientY - startY)}px`;
+      panel.style.right = 'auto';
+    });
+    handle.addEventListener('pointerup', () => dragging = false);
+    handle.addEventListener('pointercancel', () => dragging = false);
+  }
+
+  function updateLiveDateTime() {
+    const now = new Date();
+    if (els.liveDateTime) els.liveDateTime.textContent = now.toLocaleString('en-US', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function toggleRainbowMode() {
+    els.appHeader.classList.toggle('rainbow-mode');
+  }
+
+  document.addEventListener('click', (e) => {
+    const tabBtn = e.target.closest('.tab-btn');
+    if (tabBtn) setTab(tabBtn.dataset.tab);
+
+    const sortable = e.target.closest('.sortable');
+    if (sortable) toggleSort(sortable.dataset.table, sortable.dataset.key);
+
+    const lineRow = e.target.closest('tr[data-row-type="line"]');
+    if (lineRow) {
+      const id = Number(lineRow.dataset.rowId);
+      const row = state.filteredRows.find(r => r.__id === id) || state.rawRows.find(r => r.__id === id);
+      if (row) openDrawer(`Line Item — ${row.po}`, [row]);
+    }
+
+    const poRow = e.target.closest('tr[data-row-type="po"]');
+    if (poRow) {
+      const po = poRow.dataset.rowKey;
+      openDrawer(`PO — ${po}`, state.filteredRows.filter(r => r.po === po));
+    }
+
+    const vendorRow = e.target.closest('tr[data-row-type="vendor"]');
+    if (vendorRow) {
+      const vendor = vendorRow.dataset.rowKey;
+      openDrawer(`Vendor — ${vendor}`, state.filteredRows.filter(r => r.vendor === vendor));
+    }
+
+    const matrixCell = e.target.closest('td[data-clickable="1"]');
+    if (matrixCell) {
+      const rk = matrixCell.dataset.rk;
+      const ck = matrixCell.dataset.ck;
+      const rows = state.filteredRows.filter(r => String(valueForField(r, state.matrixRows)) === rk && String(valueForField(r, state.matrixCols)) === ck);
+      openDrawer(`${labelForField(state.matrixRows)}: ${rk} | ${labelForField(state.matrixCols)}: ${ck}`, rows);
+    }
+  });
+
+  els.fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => parseCsvText(reader.result, file.name);
+    reader.readAsText(file, 'windows-1252');
+  });
+  els.loadDefaultBtn.addEventListener('click', loadDefaultCsv);
+  els.exportBtn.addEventListener('click', exportCurrentView);
+  els.globalSearch.addEventListener('input', applyFilters);
+  els.vendorFilter.addEventListener('change', applyFilters);
+  els.categoryFilter.addEventListener('change', applyFilters);
+  els.statusFilter.addEventListener('change', applyFilters);
+  els.dateFieldFilter.addEventListener('change', applyFilters);
+  els.dateFrom.addEventListener('change', applyFilters);
+  els.dateTo.addEventListener('change', applyFilters);
+  els.resetBtn.addEventListener('click', () => {
+    els.globalSearch.value = '';
+    els.vendorFilter.value = 'All';
+    els.categoryFilter.value = 'All';
+    els.statusFilter.value = 'All';
+    els.dateFieldFilter.value = 'poDateObj';
+    els.dateFrom.value = '';
+    els.dateTo.value = '';
+    applyFilters();
+  });
+  els.toggleTipsBtn.addEventListener('click', () => els.tipsBox.classList.toggle('hidden'));
+  if (els.summaryModeBtn) els.summaryModeBtn.addEventListener('click', toggleSummaryMode);
+  if (els.collapseSlicerBtn) els.collapseSlicerBtn.addEventListener('click', () => {
+    els.slicerBody.classList.toggle('hidden');
+    els.collapseSlicerBtn.textContent = els.slicerBody.classList.contains('hidden') ? 'Expand' : 'Collapse';
+  });
+  if (els.detachSlicerBtn) els.detachSlicerBtn.addEventListener('click', () => {
+    els.slicerPanel.classList.toggle('floating-detached');
+    els.detachSlicerBtn.textContent = els.slicerPanel.classList.contains('floating-detached') ? 'Dock' : 'Float';
+    if (!els.slicerPanel.classList.contains('floating-detached')) {
+      els.slicerPanel.style.left = '';
+      els.slicerPanel.style.top = '';
+      els.slicerPanel.style.right = '';
+    }
+  });
+  document.querySelectorAll('[data-quick-range]').forEach(btn => btn.addEventListener('click', () => setQuickDateRange(btn.dataset.quickRange)));
+  els.matrixRows.addEventListener('change', renderMatrix);
+  els.matrixCols.addEventListener('change', renderMatrix);
+  els.matrixMetric.addEventListener('change', renderMatrix);
+  els.swapMatrixBtn.addEventListener('click', () => {
+    const a = els.matrixRows.value;
+    els.matrixRows.value = els.matrixCols.value;
+    els.matrixCols.value = a;
+    renderMatrix();
+  });
+  els.drawerClose.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key && e.key.toLowerCase() === 'g') {
+      e.preventDefault();
+      toggleRainbowMode();
+      return;
+    }
+    if (e.key && e.key.toLowerCase() === 'r' && document.activeElement !== els.globalSearch) {
+      e.preventDefault();
+      els.resetBtn.click();
+    }
+    if (e.key === 'Escape') closeDrawer();
+  });
+
+  setTab('lines');
+  updateLiveDateTime();
+  setInterval(updateLiveDateTime, 1000);
+  initSlicerDrag();
+  loadDefaultCsv();
+})();
+</script>
+  <div class="signature-fixed rounded-2xl px-4 py-2.5 text-xs font-semibold">George Oktem · IPC Resiliency Partners · East River Park, New York</div>
+</body>
+</html>
